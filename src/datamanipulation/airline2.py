@@ -15,7 +15,7 @@ def calculate_metrics(data, metric_type, cols_input):
     kurt = data.groupby(cols_input).kurtosis()
     return metric
 
-def remove_outliers(data, normal = 3, ):
+def remove_outliers(data, cols = "DEPARTURE_DELAY", normal = 3, ):
     # calculate the outliers outside of 3 standard deviation from mean
     mean = np.mean(data['DEPARTURE_DELAY'], axis=0)
     stddev = np.std(data['DEPARTURE_DELAY'], axis=0)
@@ -26,9 +26,23 @@ def remove_outliers(data, normal = 3, ):
         else:
             return True
 
-    final_list = [x for x in data['DEPARTURE_DELAY'] if ((x > mean - 2 * stddev) or (x < mean + 2 * stddev))]
-    print(final_list)
+    final_list = data[cols].apply(lambda x:np.abs(x-x.mean())/ x.std() > normal )
+    # final_list = [x for x in data['DEPARTURE_DELAY'] if ((x > mean - 2 * stddev) or (x < mean + 2 * stddev))]
     return final_list
+
+
+def log_transform(data, cols = None):
+    if cols is None:
+        cols = list_all_quantitative_cols()
+
+    def check(x):
+        if x < 0:
+            return 0.001
+        else:
+            return  x
+
+    data_log = data[cols].applymap(lambda x:np.log(check(x)))
+    return data_log
 
 
 def percentage_delay_for_all_departure_airports(data):
@@ -77,11 +91,12 @@ def count_flights_per_route(data, percentage = False):
     # for each Route(see task1), each route being a separate column
     data["Routes"] = data[['ORIGIN_AIRPORT', 'DESTINATION_AIRPORT']].apply(lambda x: '->'.join(x), axis=1)
     # data["AIRLINE", "Routes"]].groupby(by=("AIRLINE", "Routes"))["AIRLINE"].count()
-    counts = pd.pivot_table(data[["AIRLINE", "Routes"]], index="AIRLINE", columns="Routes", aggfunc=len, fill_value=0)
+    flight_count = pd.pivot_table(data[["AIRLINE", "Routes"]], index="AIRLINE", columns="Routes", aggfunc=len, fill_value=0)
+    route_delay = pd.pivot_table(data[["AIRLINE", "Routes","DEPARTURE_DELAY"]], index="AIRLINE", columns="Routes", aggfunc=np.sum, fill_value=0, calc_percent=True)
 
     if percentage:
-        data[["AIRLINE", "Routes"]].groupby(by=("AIRLINE", "Routes"))["AIRLINE"].count()
-        counts = counts.apply(lambda x: x.isnull().value_counts())
+        data[["AIRLINE", "DEPARTURE_DELAY"]].groupby(by=("AIRLINE")).count()
+        counts = flight_count.apply(lambda x: x.isnull().value_counts())
 
     return counts
 
@@ -94,5 +109,5 @@ if __name__ == "__main__":
     # average_delay(flights_df)
     # less_than_12(flights_df, percentage=True)
     # percentage_delay_for_all_departure_airports(flights_df)
-    count_flights_per_route(flights_df)
+    count_flights_per_route(flights_df, percentage=True)
 
